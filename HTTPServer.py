@@ -11,6 +11,7 @@ POST = "POST"
 status_200 = "status 200"
 status_404 = "status 404"
 
+
 def retreive_page(url):
     f = urllib.request.urlopen(url)
     page = f.read().decode("UTF-8")
@@ -18,42 +19,42 @@ def retreive_page(url):
     return page
 
 
-def receive_from_client(conn,addr):
+def receive_from_client(conn, addr):
     print(f"New client {address} connected.")
 
     connected = True
     outputdata = "failed"
     while connected:
         message = conn.recv(1024).decode()      # buffer is 1MB
-        if message.split()[0] == 'GET' :
+        if message.split()[0] == 'GET':
             # TODO: pick out name of requested file
             try:
                 filename = message.split()[1]
                 print(filename)
-                #outputdata = retreive_page(filename)
+                # outputdata = retreive_page(filename)
                 f = open(filename[0:])
                 outputdata = f.read()
-                #send the Http header which is formatted as 200 OK 
-                conn.send(bytes("HTTP/1.0 200 OK\r\n","UTF-8"))
-                #Send the content of the requested file to the client
-                #for i in range(0, len(outputdata)+10):
-                    #conn.send(outputdata[i].encode())
-                    #print(outputdata[i].encode())
-                #conn.send("\r\n".encode())
+                # send the Http header which is formatted as 200 OK
+                conn.send(bytes("HTTP/1.0 200 OK\r\n", "UTF-8"))
+                # Send the content of the requested file to the client
+                # for i in range(0, len(outputdata)+10):
+                # conn.send(outputdata[i].encode())
+                # print(outputdata[i].encode())
+                # conn.send("\r\n".encode())
                 
-                #connected = False
+                # connected = False
             except: # if file not found
-               conn.send(bytes("HTTP/1.0 404 Not Found\r\n","UTF-8"))
-               #connected = False
+                conn.send(bytes("HTTP/1.0 404 Not Found\r\n","UTF-8"))
+               # connected = False
                
         elif message.split()[0] == POST:
             try:
                 outputdata = message.split('/')[1] 
-                f = open('newfile.txt','w')   
+                f = open('newfile.txt', 'w')
                 f.write(outputdata)        
                 # TODO: wait for uploaded file from client
             except:
-                conn.send(bytes("HTTP/1.0 404 Not Found\r\n","UTF-8"))
+                conn.send(bytes("HTTP/1.0 404 Not Found\r\n", "UTF-8"))
         # TODO: handle html files, txt files and png files
         else:
             outputdata = "unknown message"
@@ -61,7 +62,7 @@ def receive_from_client(conn,addr):
             break
 
         print(f"[{addr}] {message}")
-        conn.send(bytes(outputdata,"UTF-8"))
+        conn.send(bytes(outputdata, "UTF-8"))
         conn.send("\r\n".encode())
     conn.close()
 
@@ -76,6 +77,7 @@ def main():
             thread = threading.Thread(target=receive_from_client(conn,addr), args=(conn, addr))
             thread.start()
             print(f"[ACTIVE CONNECTIONS] {threading.activeCount() - 1}")     # what is threading.activecount?
+
 
 if __name__ == "__main__":
     main()
