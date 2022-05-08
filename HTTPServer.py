@@ -1,7 +1,8 @@
 import socket
 import threading
 import urllib
-
+import os.path
+import shutil
 
 Host = "127.0.0.1"
 port = 65432
@@ -34,6 +35,7 @@ def receive_from_client(conn, addr):
                 # outputdata = retreive_page(filename)
                 f = open(filename[0:])
                 outputdata = f.read()
+
                 # send the Http header which is formatted as 200 OK
                 conn.send(bytes("HTTP/1.0 200 OK\r\n", "UTF-8"))
                 # Send the content of the requested file to the client
@@ -41,6 +43,15 @@ def receive_from_client(conn, addr):
                 # conn.send(outputdata[i].encode())
                 # print(outputdata[i].encode())
                 # conn.send("\r\n".encode())
+                f.close()
+                #send the Http header which is formatted as 200 OK 
+                conn.send(bytes("HTTP/1.0 200 OK\r\n","UTF-8"))
+                #Send the content of the requested file to the client
+                #for i in range(0, len(outputdata)+10):
+                    #conn.send(outputdata[i].encode())
+                    #print(outputdata[i].encode())
+                #conn.send("\r\n".encode())
+
                 
                 # connected = False
             except: # if file not found
@@ -49,9 +60,15 @@ def receive_from_client(conn, addr):
                
         elif message.split()[0] == POST:
             try:
+
                 outputdata = message.split('/')[1] 
                 f = open('newfile.txt', 'w')
                 f.write(outputdata)        
+
+                outputdata = message.split()[1] 
+                newpath = shutil.copy(outputdata,"E:\esraa\Computer Networks\prog.Ass\ServerFolder")
+                conn.send(bytes("HTTP/1.0 200 OK\r\n","UTF-8"))     
+
                 # TODO: wait for uploaded file from client
             except:
                 conn.send(bytes("HTTP/1.0 404 Not Found\r\n", "UTF-8"))
@@ -69,7 +86,7 @@ def receive_from_client(conn, addr):
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:          #just a smol question is this equivilant to while true?
-        s.bind(address)
+        s.bind(address)    #this should be before the while true loop
         s.listen()
         print(f"[LISTENING] Server is listening on {Host}:{port}")
         while True:
