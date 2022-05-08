@@ -14,13 +14,13 @@ def create_message():
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:      # should we change this to while true?
-        f = open('commands.txt','r')
+        f = open('commands.txt','r')    #open commands file
         while True:
             # msg = 'GET images.png'
-            msg = input()
+            #msg = input()
             #msg = 'GET images.png'
             #msg  = input()
-            msg = f.readline()
+            msg = f.readline()  #read line by line
             if not msg :    #end of file 
                 break
             Host_name = msg.split()[2]      #mesh m7tagenhom bs homa 2alo 3leha 
@@ -28,14 +28,14 @@ def main():
                 HTTP_Port = msg.split()[2]      #mesh m7tagenhom bs homa 2alo 3leha
             data = 0
             s.connect((Host, port))
-            s.sendto(bytes(msg, "UTF-8"), address)
+            s.sendto(bytes(msg, "UTF-8"), address)  #sending message to server
             if msg.split()[0] == 'POST':
-                data = s.recv(1024)
+                data = s.recv(1024) #receives respond (OK/Not found)
             elif msg.split()[0] == 'GET':
                 data = s.recv(1024)     # receives 1MB
-            print(f"Received {data}!")
+            print(f"Received {data}!")  
             # data = s.recv(2048)
-            for i in range(0, 300):
+            for i in range(0, 300):     #receives data in case of GET
                 data = s.recv(2048)
                 print(data)
 
