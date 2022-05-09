@@ -1,3 +1,0 @@
-POST ClientFile.txt localhost
-GET test.txt localhost 8080
-GET HelloWorld.txt localhost 8080
