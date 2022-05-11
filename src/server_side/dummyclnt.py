@@ -6,7 +6,7 @@ PORT = 65432  # The port used by the server
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
-    s.sendall(b"GET /book.pdf HTTP/1.1\r\nHost: localhost:65432")
-    data = s.recv(1024)
+    s.sendall(b"GET /asnmnt.pdf HTTP/1.1\r\nHost: localhost:65432")
+    data = s.recv(241*1024)
 
 print(f"Received {data!r}")

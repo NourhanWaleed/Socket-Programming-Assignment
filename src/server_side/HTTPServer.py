@@ -38,69 +38,70 @@ def retreive_page(url):
     return page
 
 
-def receive_from_client(conn,addr):
-    print(f"New client {ADDRESS} connected.")
-
-    connected = True
+def receive_from_client(message):
+    # print(f"New client {ADDRESS} connected.")
+    message = message.decode()
+    
     response = ""
-    while connected:
-        message = conn.recv(RECV_BUFF).decode()      # TODO: recv bytes w struct and unpack, buffer is 1MB 
-        if not message:
-            break
+    #while True:
+        #message = conn.recv(RECV_BUFF).decode()      # TODO: recv bytes w struct and unpack, buffer is 1MB 
+        #if not message:
+        #    break
 
-        msg_tokens = message.split()
-        # unpacking message contents
-        request = msg_tokens[0]
-        filename = msg_tokens[1].split("/",1)[1]
+    msg_tokens = message.split()
+    # unpacking message contents
+    request = msg_tokens[0]
+    filename = msg_tokens[1].split("/",1)[1]
+    try:
+        _ = msg_tokens.index("HTTP/1.1")
+        version = "HTTP/1.1"
+    except (ValueError):
+        version = "HTTP/1.0"
+
+    try:
+        i = msg_tokens.index("Host:")
+        host = msg_tokens[i+1]
         try:
-            _ = msg_tokens.index("HTTP/1.1")
-            version = "HTTP/1.1"
-        except (ValueError):
-            version = "HTTP/1.0"
-
+            port = host.split(":")[1]
+            host = host.split(":")[0]
+        except IndexError:
+            port = DEF_PORT
+    except (ValueError):
+        host = LOCAL_HOST
+# TODO: handle external url requests
+    if request == GET :
         try:
-            i = msg_tokens.index("Host:")
-            host = msg_tokens[i+1]
-            try:
-                port = host.split(":")[1]
-                host = host.split(":")[0]
-            except IndexError:
-                port = DEF_PORT
-        except (ValueError):
-            host = LOCAL_HOST
-
-        if request == GET :
-            try:
-                print(filename)
-                
-                with open(filename,"rb") as f:
-                    outputdata = f.read()       #opens requiered file and reads its content
-                                 
-                response = bytes(f"{version} 200 OK\r\n","UTF-8")
-                response += outputdata
-            except(FileNotFoundError):
-               conn.sendall(bytes(f"{version} 404 Not Found\r\n","UTF-8"))    
-        # TODO: post
-        elif request == POST:
-            try:
-                outdata = msg_tokens[FILE_NAME_IDX] 
-                newpath = shutil.copy(outputdata,SAVE_PATH)    #TODO: clean this up, copy the required file into ServerFolder (simulating sending it to server)
-                conn.sendall(bytes("HTTP/1.0 200 OK\r\n","UTF-8"))     
-                # TODO: wait for uploaded file from client
-            except(FileNotFoundError):
-                conn.sendall(b"HTTP/1.0 404 Not Found\r\n")
-                break
-        
-        else:
-            outputdata = "unknown message"      #for any not supported methods
+            print(filename)
+            
+            with open(filename,"rb") as f:
+                outputdata = f.read()       #opens requiered file and reads its content
+                                
+            response = bytes(f"{version} 200 OK\r\n","UTF-8")
+            response += outputdata
+        except(FileNotFoundError):
+            response = (bytes(f"{version} 404 Not Found\r\n","UTF-8"))    
+    # TODO: post
+    elif request == POST:
+        try:
+            outdata = msg_tokens[FILE_NAME_IDX] 
+            newpath = shutil.copy(outputdata,SAVE_PATH)    #TODO: clean this up, copy the required file into ServerFolder (simulating sending it to server)
+            response = (bytes("HTTP/1.0 200 OK\r\n","UTF-8"))     
+            # TODO: wait for uploaded file from client
+        except(FileNotFoundError):
+            response = (b"HTTP/1.0 404 Not Found\r\n")
+            
+    
+    # else:
+    #     outputdata = "unknown message"      #for any unsupported methods
 
 
-        print(f"[{addr}] {message}")
-        if response != "":     # Send the content of the requested file to the client
-            conn.sendall(response) 
-        conn.sendall("\r\n".encode())
-    conn.close()
-        # conn.sendall(b"exitinggggg")
+    #print(f"[{addr}] {message}")
+#     if response != "":     # Send the content of the requested file to the client
+#         conn.sendall(response) 
+#     conn.sendall("\r\n".encode())
+# conn.close()
+    # conn.sendall(b"exitinggggg")
+    return response + (b"\r\n")
 
 def accept_wrapper(sock):
     conn, addr = sock.accept()  # Should be ready to read
@@ -122,7 +123,9 @@ def service_connection(key, mask):
             SEL.unregister(sock)
             sock.close()
     if mask & selectors.EVENT_WRITE and data.outb:
-        print(f"Echoing {data.outb!r} to {data.addr}")
+        # print(f"Echoing {data.outb!r} to {data.addr}") #TODO: replace
+        # send data to fn, receive output data, place it in data.outb
+        data.outb = receive_from_client(data.outb)
         sent = sock.send(data.outb)  # Should be ready to write
         data.outb = data.outb[sent:]
 
