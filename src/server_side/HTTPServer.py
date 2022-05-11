@@ -1,6 +1,7 @@
 import socket
 import threading
 from urllib import request
+from urllib.error import URLError
 import selectors
 import sys
 import shutil
@@ -33,7 +34,7 @@ SEL = selectors.DefaultSelector()
 
 def retreive_page(url):
     f = request.urlopen(url)
-    page = f.read().decode("UTF-8")
+    page = f.read()
     f.close()
     return page
 
@@ -41,45 +42,60 @@ def retreive_page(url):
 def receive_from_client(message):
     # print(f"New client {ADDRESS} connected.")
     message = message.decode()
-    
     response = ""
-    #while True:
-        #message = conn.recv(RECV_BUFF).decode()      # TODO: recv bytes w struct and unpack, buffer is 1MB 
-        #if not message:
-        #    break
 
     msg_tokens = message.split()
+    
     # unpacking message contents
     request = msg_tokens[0]
     filename = msg_tokens[1].split("/",1)[1]
+    
+    # http version
     try:
         _ = msg_tokens.index("HTTP/1.1")
         version = "HTTP/1.1"
     except (ValueError):
         version = "HTTP/1.0"
 
+    # host name and por number
     try:
         i = msg_tokens.index("Host:")
         host = msg_tokens[i+1]
-        try:
-            port = host.split(":")[1]
-            host = host.split(":")[0]
-        except IndexError:
-            port = DEF_PORT
+        
+        # if not external url
+        if not host.startswith("http"):
+            try:
+                port = host.split(":")[1]
+                host = host.split(":")[0]
+            except IndexError:
+                port = DEF_PORT
+
+    # default is localhost
     except (ValueError):
         host = LOCAL_HOST
-# TODO: handle external url requests
+
+        
     if request == GET :
-        try:
-            print(filename)
-            
-            with open(filename,"rb") as f:
-                outputdata = f.read()       #opens requiered file and reads its content
-                                
-            response = bytes(f"{version} 200 OK\r\n","UTF-8")
-            response += outputdata
-        except(FileNotFoundError):
-            response = (bytes(f"{version} 404 Not Found\r\n","UTF-8"))    
+        # if external url delegate  to urllib or the url is wrong
+        if host.startswith("http"):
+            try:
+                file = retreive_page(host+"/"+filename)
+                response = bytes(f"{version} {STATUS_OK}\r\n","UTF-8") + file
+            except(URLError):
+                response = (bytes(f"{version} {STATUS_NOT_FOUND}\r\n","UTF-8"))   
+                
+        else:
+            try:
+                print(filename)
+                
+                with open(filename,"rb") as f:
+                    outputdata = f.read()       #opens requiered file and reads its content
+                                    
+                response = bytes(f"{version} 200 OK\r\n","UTF-8")
+                response += outputdata
+            except(FileNotFoundError):
+                response = (bytes(f"{version} 404 Not Found\r\n","UTF-8"))    
+
     # TODO: post
     elif request == POST:
         try:
@@ -115,11 +131,16 @@ def service_connection(key, mask):
     sock = key.fileobj
     data = key.data
     if mask & selectors.EVENT_READ:
-        recv_data = sock.recv(1024)  # Should be ready to read
-        if recv_data:
-            data.outb += recv_data
-        else:
-            print(f"Closing connection to {data.addr}")
+        try:
+            recv_data = sock.recv(RECV_BUFF)  # Should be ready to read
+            if recv_data:
+                data.outb += recv_data
+            else:
+                print(f"Closing connection to {data.addr}")
+                SEL.unregister(sock)
+                sock.close()
+        except(ConnectionResetError):
+            print(f"Connection to {data.addr} was reset")
             SEL.unregister(sock)
             sock.close()
     if mask & selectors.EVENT_WRITE and data.outb:
@@ -130,7 +151,7 @@ def service_connection(key, mask):
         data.outb = data.outb[sent:]
 
 def main():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:          #just a smol question is this equivilant to while true? nah ur good
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(ADDRESS)
         s.listen()
         print(f"[LISTENING] Server is listening on {LOCAL_HOST}:{PORT}")
