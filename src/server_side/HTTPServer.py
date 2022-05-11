@@ -1,9 +1,10 @@
 import socket
 import threading
 from urllib import request
-import os.path
+import selectors
+import sys
 import shutil
-from struct import pack, unpack
+import types
 
 PORT = 65432 
 
@@ -20,13 +21,15 @@ PORT_IDX = 5
 
 GET = "GET"
 POST = "POST"
-STATUS_OK = "200 OK" # TODO:use
+STATUS_OK = "200 OK"
 STATUS_NOT_FOUND = "404 Not Found"
 
 LOCAL_HOST = "127.0.0.1"
 DEF_PORT = 80
 
 ADDRESS = (LOCAL_HOST, PORT)
+
+SEL = selectors.DefaultSelector()
 
 def retreive_page(url):
     f = request.urlopen(url)
@@ -96,20 +99,59 @@ def receive_from_client(conn,addr):
         if response != "":     # Send the content of the requested file to the client
             conn.sendall(response) 
         conn.sendall("\r\n".encode())
-        conn.sendall(b"exitinggggg")
     conn.close()
+        # conn.sendall(b"exitinggggg")
 
+def accept_wrapper(sock):
+    conn, addr = sock.accept()  # Should be ready to read
+    print(f"Accepted connection from {addr}")
+    conn.setblocking(False)
+    data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"")
+    events = selectors.EVENT_READ | selectors.EVENT_WRITE
+    SEL.register(conn, events, data=data)
+
+def service_connection(key, mask):
+    sock = key.fileobj
+    data = key.data
+    if mask & selectors.EVENT_READ:
+        recv_data = sock.recv(1024)  # Should be ready to read
+        if recv_data:
+            data.outb += recv_data
+        else:
+            print(f"Closing connection to {data.addr}")
+            SEL.unregister(sock)
+            sock.close()
+    if mask & selectors.EVENT_WRITE and data.outb:
+        print(f"Echoing {data.outb!r} to {data.addr}")
+        sent = sock.send(data.outb)  # Should be ready to write
+        data.outb = data.outb[sent:]
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:          #just a smol question is this equivilant to while true? nah ur good
         s.bind(ADDRESS)
         s.listen()
         print(f"[LISTENING] Server is listening on {LOCAL_HOST}:{PORT}")
+        s.setblocking(False)
+        SEL.register(s, selectors.EVENT_READ, data=None)
+
+        try:
+            while True:
+                events = SEL.select(timeout=None)
+                for key, mask in events:
+                    if key.data is None:
+                        accept_wrapper(key.fileobj) #TODO
+                    else:
+                        service_connection(key, mask) #TODO
+        except KeyboardInterrupt:
+            print("Caught keyboard interrupt, exiting")
+        finally:
+            SEL.close()
+
         while True:
             conn, addr = s.accept()
-            thread = threading.Thread(target=receive_from_client(conn,addr), args=(conn, addr)) # f: is this working?
-            thread.start()
-            print(f"[ACTIVE CONNECTIONS] {threading.activeCount()}")     # what is threading.activecount?  the number of Thread objects currently alive. 
+            #thread = threading.Thread(target=receive_from_client(conn,addr), args=(conn, addr)) # f: is this working?
+            #thread.start()
+            #print(f"[ACTIVE CONNECTIONS] {threading.activeCount()}")     # what is threading.activecount?  the number of Thread objects currently alive. 
 
 if __name__ == "__main__":
     main()
