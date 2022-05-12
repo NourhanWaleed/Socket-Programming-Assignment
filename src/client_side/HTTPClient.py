@@ -35,13 +35,6 @@ POST = "POST"
 STATUS_OK = "200 OK" # TODO:use
 STATUS_NOT_FOUND = "404 Not Found"
 
-
-
-'''
-def create_message():
-    messages = 'GET test.txt'
-    return messages
-'''
 def server_post_request(file_name:str):
     with open(file_name, 'rb') as f:
         data = f.read()
@@ -52,11 +45,7 @@ def main():
     f = open(COMMAND_FILE_PATH,'r')    #open commands file
 
     while True:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:      # should we change this to while true?
-            # msg = 'GET images.png'
-            #msg = input()
-            #msg = 'GET images.png'
-            #msg  = input()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:  
             msg = f.readline()  #read line by line
             
             if not msg:    #end of file 
@@ -74,7 +63,7 @@ def main():
             
             s.connect((LOCAL_HOST, DEST_PORT)) 
             if request == "GET":
-                message = f"GET {file_name} HTTP/1.1\r\nHost: {Host_name}{HTTP_Port}\r\n\r\n"
+                message = f"GET /{file_name} HTTP/1.1\r\nHost: {Host_name}{HTTP_Port}\r\n\r\n"
             elif request == "POST":
                 file, file_size = server_post_request(file_name)
                 message = f"POST /{file_name} HTTP/1.1\r\nHost: {Host_name}{HTTP_Port}\r\nContent-Length: {file_size}\r\n\r\n{file}\r\n"
@@ -84,14 +73,8 @@ def main():
                 data = s.recv(RECV_BUFF) #receives responce (OK/Not found)
             elif msg_tokens[REQUEST_IDX] == 'GET':
                 data = s.recv(RECV_BUFF)     # receives 1MB
-                # # TODO: what is this? WHY 300?
-                # for i in range(0, 300):     #receives data in case of GET what is the server sending here?
-                #     data = s.recv(GET_RECV_BUFF)
-                #     print(data)
+               
             print(f"Received {data}!")  
-            # data = s.recv(GET_RECV_BUFF)
-
-
     f.close()
 
 
@@ -101,4 +84,5 @@ if __name__ == "__main__":
 
 
 
-# point 3 still not done
+# TODO: Cache
+# TODO: buffer size variable
