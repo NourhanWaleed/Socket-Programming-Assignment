@@ -11,8 +11,10 @@ PORT = 65432
 
 SAVE_PATH = "files/output"
 
-RECV_BUFF = 1024
+RECV_BUFF = 1024*4
 GET_RECV_BUFF = 2048
+
+post_request_continuation = False
 
 REQUEST_IDX = 0
 FILE_NAME_IDX = 1
@@ -38,12 +40,8 @@ def retreive_page(url):
     f.close()
     return page
 
-
-def receive_from_client(message):
-    # print(f"New client {ADDRESS} connected.")
-    message = message.decode()
-    response = ""
-
+#util
+def unpack_request(message:str) -> dict:
     msg_tokens = message.split()
     
     # unpacking message contents
@@ -57,7 +55,7 @@ def receive_from_client(message):
     except (ValueError):
         version = "HTTP/1.0"
 
-    # host name and por number
+    # host name and port number
     try:
         i = msg_tokens.index("Host:")
         host = msg_tokens[i+1]
@@ -67,56 +65,89 @@ def receive_from_client(message):
             try:
                 port = host.split(":")[1]
                 host = host.split(":")[0]
+                message_contains_port = True
             except IndexError:
                 port = DEF_PORT
+                message_contains_port = False
 
+        message_contains_host = True
     # default is localhost
     except (ValueError):
         host = LOCAL_HOST
+        message_contains_host = False
 
-        
-    if request == GET :
-        # if external url delegate  to urllib or the url is wrong
-        if host.startswith("http"):
-            try:
-                file = retreive_page(host+"/"+filename)
-                response = bytes(f"{version} {STATUS_OK}\r\n","UTF-8") + file
-            except(URLError):
-                response = (bytes(f"{version} {STATUS_NOT_FOUND}\r\n","UTF-8"))   
-                
+    # get content length
+    try:
+        i = msg_tokens.index("Content-Length:")
+        message_size = int(msg_tokens[i + 1])
+    except (ValueError):
+        message_size = None
+
+    if request == GET:
+        if message_contains_port:
+            data_idx = message.index(port) + len(port) + 2
+        elif message_contains_host:
+            data_idx = message.index(host) + len(host) + 2
         else:
-            try:
-                print(filename)
-                
-                with open(filename,"rb") as f:
-                    outputdata = f.read()       #opens requiered file and reads its content
-                                    
-                response = bytes(f"{version} 200 OK\r\n","UTF-8")
-                response += outputdata
-            except(FileNotFoundError):
-                response = (bytes(f"{version} 404 Not Found\r\n","UTF-8"))    
-
-    # TODO: post
-    elif request == POST:
-        try:
-            outdata = msg_tokens[FILE_NAME_IDX] 
-            newpath = shutil.copy(outputdata,SAVE_PATH)    #TODO: clean this up, copy the required file into ServerFolder (simulating sending it to server)
-            response = (bytes("HTTP/1.0 200 OK\r\n","UTF-8"))     
-            # TODO: wait for uploaded file from client
-        except(FileNotFoundError):
-            response = (b"HTTP/1.0 404 Not Found\r\n")
-            
+            data_idx = message.index(version) + len(version) + 2
     
-    # else:
-    #     outputdata = "unknown message"      #for any unsupported methods
+        data = message[data_idx:]
+    else :
+        data = ""
+
+    result = {
+        'host':host,
+        'port':port,
+        'version':version,
+        'filename':filename,
+        'request': request,
+        'message-length':message_size,
+        'data':data
+    }
+    return result
 
 
-    #print(f"[{addr}] {message}")
-#     if response != "":     # Send the content of the requested file to the client
-#         conn.sendall(response) 
-#     conn.sendall("\r\n".encode())
-# conn.close()
-    # conn.sendall(b"exitinggggg")
+
+def service_get_request(result:dict) -> bytes:
+    # if external url delegate  to urllib or the url is wrong
+    if result['host'].startswith("http"):
+        try:
+            file = retreive_page(result['host']+"/"+result['filename'])
+            response = bytes(f"{result['version']} {STATUS_OK}\r\n","UTF-8") + file
+        except(URLError):
+            response = (bytes(f"{result['version']} {STATUS_NOT_FOUND}\r\n","UTF-8"))   
+            
+    else:
+        try:
+            with open(result['filename'],"rb") as f:
+                outputdata = f.read()       #opens requiered file and reads its content
+                                
+            response = bytes(f"{result ['version']} {STATUS_OK}\r\n\r\n","UTF-8")
+            response += outputdata
+        except(FileNotFoundError):
+            response = (bytes(f"{result ['version']} {STATUS_NOT_FOUND}\r\n","UTF-8"))    
+    return response
+
+def service_post_request(result:dict)-> bytes:
+    outfile = result['filename']
+    data = result['data']
+
+    with open(outfile,'wb') as f:
+        f.write(bytes(data[:-2],"UTF-8"))
+    response = (bytes(f"{result['version']} {STATUS_OK}\r\n","UTF-8"))    
+    return response
+
+def receive_from_client(message):
+    message = message.decode()
+    response = b""
+
+    result = unpack_request(message)
+
+    if result['request'] == GET :
+        response = service_get_request(result)  
+    elif result['request'] == POST:
+        response = service_post_request(result)
+            
     return response + (b"\r\n")
 
 def accept_wrapper(sock):
@@ -144,7 +175,6 @@ def service_connection(key, mask):
             SEL.unregister(sock)
             sock.close()
     if mask & selectors.EVENT_WRITE and data.outb:
-        # print(f"Echoing {data.outb!r} to {data.addr}") #TODO: replace
         # send data to fn, receive output data, place it in data.outb
         data.outb = receive_from_client(data.outb)
         sent = sock.send(data.outb)  # Should be ready to write
@@ -163,24 +193,18 @@ def main():
                 events = SEL.select(timeout=None)
                 for key, mask in events:
                     if key.data is None:
-                        accept_wrapper(key.fileobj) #TODO
+                        accept_wrapper(key.fileobj)
                     else:
-                        service_connection(key, mask) #TODO
+                        service_connection(key, mask)
         except KeyboardInterrupt:
             print("Caught keyboard interrupt, exiting")
         finally:
             SEL.close()
 
-        while True:
-            conn, addr = s.accept()
-            #thread = threading.Thread(target=receive_from_client(conn,addr), args=(conn, addr)) # f: is this working?
-            #thread.start()
-            #print(f"[ACTIVE CONNECTIONS] {threading.activeCount()}")     # what is threading.activecount?  the number of Thread objects currently alive. 
-
 if __name__ == "__main__":
     main()
 
 '''
-TODO: why does it get sad when a connection is closed? ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
-TODO: who closes the threads?
+TODO: HTTP 1.1: time out : persistent connection
+TODO: 
 '''
