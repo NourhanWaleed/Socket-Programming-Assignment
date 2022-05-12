@@ -6,7 +6,7 @@ PORT = 65432  # The port used by the server
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
-    request = b"GET /test.txt HTTP/1.1\r\nHost: localhost:65432\r\n"
+    request = b"GET /test.txt HTTP/1.1\r\nHost: http://localhost:8080\r\n"
     
     
     # with open("test.txt","rb") as f:

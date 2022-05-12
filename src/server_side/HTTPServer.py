@@ -1,26 +1,17 @@
 import socket
-import threading
 from urllib import request
 from urllib.error import URLError
 import selectors
-import sys
-import shutil
 import types
 
-PORT = 65432 
+from grpc import LocalConnectionType
+
+PORT = 65432
 
 SAVE_PATH = "files/output"
 
 RECV_BUFF = 1024*4
 GET_RECV_BUFF = 2048
-
-post_request_continuation = False
-
-REQUEST_IDX = 0
-FILE_NAME_IDX = 1
-HTTP_VERSION_IDX = 2
-HOST_IDX = 4
-PORT_IDX = 5
 
 GET = "GET"
 POST = "POST"
@@ -34,6 +25,8 @@ ADDRESS = (LOCAL_HOST, PORT)
 
 SEL = selectors.DefaultSelector()
 
+post_request_continuation = False
+
 def retreive_page(url):
     f = request.urlopen(url)
     page = f.read()
@@ -44,6 +37,9 @@ def retreive_page(url):
 def unpack_request(message:str) -> dict:
     msg_tokens = message.split()
     
+    message_contains_port = False
+    message_contains_host = False
+
     # unpacking message contents
     request = msg_tokens[0]
     filename = msg_tokens[1].split("/",1)[1]
@@ -68,13 +64,20 @@ def unpack_request(message:str) -> dict:
                 message_contains_port = True
             except IndexError:
                 port = DEF_PORT
-                message_contains_port = False
-
+        else:
+            # check if http url contains localhost to prevent loop
+            try:
+                _ =  host.index('localhost')
+                host = LOCAL_HOST
+                port = host.split(':')[2]
+            except(ValueError):
+                # external url
+                port = None
         message_contains_host = True
     # default is localhost
-    except (ValueError):
+    except (ValueError, IndexError):
         host = LOCAL_HOST
-        message_contains_host = False
+        port = DEF_PORT
 
     # get content length
     try:
@@ -110,6 +113,9 @@ def unpack_request(message:str) -> dict:
 
 def service_get_request(result:dict) -> bytes:
     # if external url delegate  to urllib or the url is wrong
+    if result['port'] != PORT:
+        response = (bytes(f"{result ['version']} {STATUS_NOT_FOUND}\r\n","UTF-8"))    # TODO: send a clearer message
+
     if result['host'].startswith("http"):
         try:
             file = retreive_page(result['host']+"/"+result['filename'])
@@ -206,5 +212,10 @@ if __name__ == "__main__":
 
 '''
 TODO: HTTP 1.1: time out : persistent connection
-TODO: 
+TODO: buffer size in post request
+
+outline
+ set a global variaable to recognize whether the next packet is continuation of post request
+ in the receive from client fn: check this the first thing, delegate to post to continue receiving
+
 '''
