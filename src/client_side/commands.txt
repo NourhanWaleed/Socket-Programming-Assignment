@@ -1,2 +1,1 @@
-GET /test.txt HTTP/1.1
-Host: localhost:65432
+GET /blabla.txt localhost

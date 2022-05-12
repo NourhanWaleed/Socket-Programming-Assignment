@@ -4,8 +4,8 @@ from urllib.error import URLError
 import selectors
 import types
 
-from grpc import LocalConnectionType
-
+# from grpc import LocalConnectionType
+# TODO: POST request reads content length into file
 PORT = 65432
 
 SAVE_PATH = "files/output"
@@ -86,7 +86,7 @@ def unpack_request(message:str) -> dict:
     except (ValueError):
         message_size = None
 
-    if request == GET:
+    if request == POST:
         if message_contains_port:
             data_idx = message.index(port) + len(port) + 2
         elif message_contains_host:
