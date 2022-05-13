@@ -41,7 +41,14 @@ def server_post_request(file_name:str):
         data_size = len(data)
     return data,data_size    
 
+
+def is_cached(cache:dict, filename:str, host_name:str):
+    if filename == "":
+        filename = str(hash(host_name))
+    return cache.__contains__(filename)
+
 def main():
+    cache = {}
     f = open(COMMAND_FILE_PATH,'r')    #open commands file
 
     while True:
@@ -54,11 +61,19 @@ def main():
             msg_tokens = msg.split()
             request = msg_tokens[REQUEST_IDX]
             file_name = msg_tokens[FILE_NAME_IDX].split('/',1)[1]
+
             Host_name = msg_tokens[HOST_IDX]     
             if len(msg_tokens) >= 4 and msg_tokens[PORT_IDX] != '\0' :
                 HTTP_Port = ":"  + msg_tokens[PORT_IDX]     
             else:
                 HTTP_Port = ""
+
+            if is_cached(cache, file_name,Host_name):
+                with open(cache[file_name]) as f:
+                    f.read()
+                    print(f)
+                    continue
+
             data = 0
             
             s.connect((LOCAL_HOST, DEST_PORT)) 
@@ -69,11 +84,24 @@ def main():
                 message = f"POST /{file_name} HTTP/1.1\r\nHost: {Host_name}{HTTP_Port}\r\nContent-Length: {file_size}\r\n\r\n{file}\r\n"
             s.sendall(bytes(message,"UTF-8")) # sending message to server
             
-            if msg_tokens[REQUEST_IDX] == 'POST':
-                data = s.recv(RECV_BUFF) #receives responce (OK/Not found)
-            elif msg_tokens[REQUEST_IDX] == 'GET':
-                data = s.recv(RECV_BUFF)     # receives 1MB
-               
+            # if msg_tokens[REQUEST_IDX] == 'POST':
+            #     data = s.recv(RECV_BUFF) #receives responce (OK/Not found)
+            # elif msg_tokens[REQUEST_IDX] == 'GET':
+            data = s.recv(RECV_BUFF)     # receives 1MB
+
+
+            if msg_tokens[REQUEST_IDX] == "GET":
+                response = data.decode()
+                brk = "\r\n\r\n"
+                file_idx = response.find(brk)
+                file = response[file_idx + len(brk):]
+                if file_name == "":
+                    file_name = str(hash(Host_name))
+                with open(file_name,'wb') as fp:
+                    fp.write(bytes(file,"UTF-8"))
+
+                cache[file_name] = file_name
+
             print(f"Received {data}!")  
     f.close()
 
