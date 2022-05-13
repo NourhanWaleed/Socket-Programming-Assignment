@@ -10,7 +10,7 @@ PORT = 65432
 
 SAVE_PATH = "files/output"
 
-RECV_BUFF = 1024*4
+RECV_BUFF = 1024
 GET_RECV_BUFF = 2048
 
 GET = "GET"
@@ -25,7 +25,7 @@ ADDRESS = (LOCAL_HOST, PORT)
 
 SEL = selectors.DefaultSelector()
 
-post_request_continuation = False
+post_request_continuation = {"is_continuation":False}
 
 def retreive_page(url):
     f = request.urlopen(url)
@@ -34,11 +34,12 @@ def retreive_page(url):
     return page
 
 #util
-def unpack_request(message:str) -> dict:
-    msg_tokens = message.split()
-    
-    message_contains_port = False
-    message_contains_host = False
+def unpack_request(message:bytes, socket_id) -> dict:
+    data_idx = message.index(bytes("\r\n\r\n","UTF-8")) + 4
+    headers = message[:data_idx - 2]
+    headers = headers.decode()
+    msg_tokens = headers.split()
+
 
     # unpacking message contents
     request = msg_tokens[0]
@@ -61,7 +62,6 @@ def unpack_request(message:str) -> dict:
             try:
                 port = host.split(":")[1]
                 host = host.split(":")[0]
-                message_contains_port = True
             except IndexError:
                 port = DEF_PORT
         else:
@@ -73,7 +73,6 @@ def unpack_request(message:str) -> dict:
             except(ValueError):
                 # external url
                 port = None
-        message_contains_host = True
     # default is localhost
     except (ValueError, IndexError):
         host = LOCAL_HOST
@@ -83,17 +82,12 @@ def unpack_request(message:str) -> dict:
     try:
         i = msg_tokens.index("Content-Length:")
         message_size = int(msg_tokens[i + 1])
+        if message_size > RECV_BUFF:
+            post_request_continuation[socket_id] = {"is_continuation":True,"remaining":message_size - RECV_BUFF, "filename":filename}
     except (ValueError):
         message_size = None
 
     if request == POST:
-        if message_contains_port:
-            data_idx = message.index(port) + len(port) + 2
-        elif message_contains_host:
-            data_idx = message.index(host) + len(host) + 2
-        else:
-            data_idx = message.index(version) + len(version) + 2
-    
         data = message[data_idx:]
     else :
         data = ""
@@ -109,8 +103,6 @@ def unpack_request(message:str) -> dict:
     }
     return result
 
-
-
 def service_get_request(result:dict) -> bytes:
     # if external url delegate  to urllib or the url is wrong
     if result['port'] != PORT:
@@ -119,7 +111,7 @@ def service_get_request(result:dict) -> bytes:
     if result['host'].startswith("http"):
         try:
             file = retreive_page(result['host']+"/"+result['filename'])
-            response = bytes(f"{result['version']} {STATUS_OK}\r\n","UTF-8") + file
+            response = bytes(f"{result['version']} {STATUS_OK}\r\n\r\n","UTF-8") + file
         except(URLError):
             response = (bytes(f"{result['version']} {STATUS_NOT_FOUND}\r\n","UTF-8"))   
             
@@ -139,15 +131,30 @@ def service_post_request(result:dict)-> bytes:
     data = result['data']
 
     with open(outfile,'wb') as f:
-        f.write(bytes(data[:-2],"UTF-8"))
+        f.write(data[:-2])
     response = (bytes(f"{result['version']} {STATUS_OK}\r\n","UTF-8"))    
     return response
 
-def receive_from_client(message):
-    message = message.decode()
+def continue_post_recv(message: bytes, filename : str):
+    with open(filename,'ab') as f:
+        f.write(message)
+    
+
+def receive_from_client(message, socket_id):
+    check = post_request_continuation.get(socket_id,None)
+
+    if check is not None and check.get("is_continuation"):
+        continue_post_recv(message,check['filename'])
+        check["remaining"] -= len(message)
+        if check["remaining"] <= 0:
+            check["is_continuation"] = False
+        return None
+    
+    # message = message.decode()
     response = b""
 
-    result = unpack_request(message)
+
+    result = unpack_request(message, socket_id)
 
     if result['request'] == GET :
         response = service_get_request(result)  
@@ -182,9 +189,12 @@ def service_connection(key, mask):
             sock.close()
     if mask & selectors.EVENT_WRITE and data.outb:
         # send data to fn, receive output data, place it in data.outb
-        data.outb = receive_from_client(data.outb)
-        sent = sock.send(data.outb)  # Should be ready to write
-        data.outb = data.outb[sent:]
+        data.outb = receive_from_client(data.outb,(sock.getsockname() + sock.getpeername()))
+        if data.outb is not None:
+            sent = sock.send(data.outb)  # Should be ready to write 
+            data.outb = data.outb[sent:]
+        else:
+            data.outb = b""
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
