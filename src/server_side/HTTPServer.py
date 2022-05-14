@@ -1,8 +1,10 @@
 import socket
+from unittest import result
 from urllib import request
 from urllib.error import URLError
 import selectors
 import types
+import time
 
 # from grpc import LocalConnectionType
 # TODO: POST request reads content length into file
@@ -206,16 +208,21 @@ def main():
 
         try:
             while True:
+                s.settimeout(10)
                 events = SEL.select(timeout=None)
                 for key, mask in events:
+                    #if result['version'] == 'HTTP/1.1':
+                     #  time.wait(10)
+                      # SEL.close()
+                       #break       
                     if key.data is None:
                         accept_wrapper(key.fileobj)
                     else:
-                        service_connection(key, mask)
+                        service_connection(key, mask) 
         except KeyboardInterrupt:
             print("Caught keyboard interrupt, exiting")
         finally:
-            SEL.close()
+            SEL.close()        #should i remove this?
 
 if __name__ == "__main__":
     main()
