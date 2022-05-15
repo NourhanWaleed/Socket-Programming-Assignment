@@ -1,4 +1,1 @@
-POST /blabla.txt localhost
-GET /blabla.txt localhost
-GET /test.txt localhost 54321
-GET / https://www.google.com
+GET /book.pdf localhost

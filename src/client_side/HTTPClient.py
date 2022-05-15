@@ -22,8 +22,8 @@ BROWSER_PORT = 80             # where to use this?
 LOCAL_HOST = "127.0.0.1"
 DEST_ADDRESS = (LOCAL_HOST, DEST_PORT)
 
-RECV_BUFF = 50*1024
-GET_RECV_BUFF = 50*2048
+RECV_BUFF = 18*2**20
+GET_RECV_BUFF = 36*2**20
 
 HOST_IDX = 2
 PORT_IDX = 3
@@ -91,14 +91,14 @@ def main():
 
 
             if msg_tokens[REQUEST_IDX] == "GET":
-                response = data.decode()
-                brk = "\r\n\r\n"
+                response = data
+                brk = b"\r\n\r\n"
                 file_idx = response.find(brk)
                 file = response[file_idx + len(brk):]
                 if file_name == "":
                     file_name = str(hash(Host_name))
                 with open(file_name,'wb') as fp:
-                    fp.write(bytes(file,"UTF-8"))
+                    fp.write(file)
 
                 cache[file_name] = file_name
 

@@ -179,6 +179,7 @@ def service_connection(key, mask):
     if mask & selectors.EVENT_READ:
         try:
             recv_data = sock.recv(RECV_BUFF)  # Should be ready to read
+            
             if recv_data:
                 data.outb += recv_data
             else:
