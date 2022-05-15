@@ -1,6 +1,6 @@
 import socket
 import random
-
+import sys
 from requests import request
 
 '''
@@ -48,9 +48,10 @@ def is_cached(cache:dict, filename:str, host_name:str):
     return cache.__contains__(filename)
 
 def main():
+    command_file_name = sys.argv[1]
     cache = {}
-    f = open(COMMAND_FILE_PATH,'r')    #open commands file
-
+    f = open(command_file_name,'r')    #open commands file
+    
     while True:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:  
             msg = f.readline()  #read line by line
